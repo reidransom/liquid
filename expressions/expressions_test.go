@@ -102,6 +102,16 @@ var evaluatorTests = []struct {
 	{`false or false`, false},
 	{`false or true`, true},
 
+	// && and || operators (aliases for and/or)
+	{`true && false`, false},
+	{`true && true`, true},
+	{`true && true && true`, true},
+	{`false || false`, false},
+	{`false || true`, true},
+	{`1 == 1 && 2 == 2`, true},
+	{`1 == 1 && 2 == 3`, false},
+	{`1 == 2 || 2 == 2`, true},
+
 	{`"seafood" contains "foo"`, true},
 	{`"seafood" contains "bar"`, false},
 	{`array contains "first"`, true},

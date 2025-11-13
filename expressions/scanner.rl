@@ -99,6 +99,8 @@ func (lex *lexer) Lex(out *yySymType) int {
 			"!=" => { tok = NEQ; fbreak; };
 			">=" => { tok = GE; fbreak; };
 			"<=" => { tok = LE; fbreak; };
+			"&&" => { tok = AND; fbreak; };
+			"||" => { tok = OR; fbreak; };
 			"and" => { tok = AND; fbreak; };
 			"or" => { tok = OR; fbreak; };
 			"contains" => { tok = CONTAINS; fbreak; };
