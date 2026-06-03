@@ -2,6 +2,7 @@ package values
 
 import (
 	"reflect"
+	"time"
 )
 
 var (
@@ -14,6 +15,12 @@ func Equal(a, b any) bool { //nolint: gocyclo
 	a, b = ToLiquid(a), ToLiquid(b)
 	if a == nil || b == nil {
 		return a == b
+	}
+
+	if at, ok := a.(time.Time); ok {
+		if bt, ok := b.(time.Time); ok {
+			return at.Equal(bt)
+		}
 	}
 
 	ra, rb := reflect.ValueOf(a), reflect.ValueOf(b)
@@ -54,6 +61,12 @@ func Less(a, b any) bool {
 	a, b = ToLiquid(a), ToLiquid(b)
 	if a == nil || b == nil {
 		return false
+	}
+
+	if at, ok := a.(time.Time); ok {
+		if bt, ok := b.(time.Time); ok {
+			return at.Before(bt)
+		}
 	}
 
 	ra, rb := reflect.ValueOf(a), reflect.ValueOf(b)

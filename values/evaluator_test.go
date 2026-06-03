@@ -25,6 +25,9 @@ var lessTests = []struct {
 	{"a", "b", true},
 	{"b", "a", false},
 	{[]string{"a"}, []string{"a"}, false},
+	{timeEarly, timeLate, true},
+	{timeLate, timeEarly, false},
+	{timeEarly, timeEarly, false},
 }
 
 func TestLess(t *testing.T) {
