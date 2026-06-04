@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/osteele/liquid/render"
+	"github.com/reidransom/liquid/render"
 )
 
 func Example() {
@@ -291,7 +291,7 @@ func TestUnicodeEdgeCases(t *testing.T) {
 }
 
 // TestIssue63_UnicodeVariableNames tests that Unicode variable names work correctly
-// See: https://github.com/osteele/liquid/issues/63
+// See: https://github.com/reidransom/liquid/issues/63
 func TestIssue63_UnicodeVariableNames(t *testing.T) {
 	t.Run("ExactIssue63Example", func(t *testing.T) {
 		// This is the exact example from issue #63 that was failing

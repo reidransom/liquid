@@ -1,7 +1,7 @@
 package parser
 
 import (
-	"github.com/osteele/liquid/expressions"
+	"github.com/reidransom/liquid/expressions"
 )
 
 // ASTNode is a node of an AST.

@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/osteele/liquid/values"
+	"github.com/reidransom/liquid/values"
 )
 
 func TestContext_AddFilter(t *testing.T) {

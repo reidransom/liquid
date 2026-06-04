@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/osteele/liquid/parser"
+	"github.com/reidransom/liquid/parser"
 )
 
 func addContextTestTags(s Config) {

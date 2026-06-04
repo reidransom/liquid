@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/osteele/liquid/parser"
+	"github.com/reidransom/liquid/parser"
 
-	"github.com/osteele/liquid/values"
+	"github.com/reidransom/liquid/values"
 )
 
 // Render renders the render tree.

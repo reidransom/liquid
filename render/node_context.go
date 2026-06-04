@@ -3,7 +3,7 @@ package render
 import (
 	"maps"
 
-	"github.com/osteele/liquid/expressions"
+	"github.com/reidransom/liquid/expressions"
 )
 
 // nodeContext provides the evaluation context for rendering the AST.

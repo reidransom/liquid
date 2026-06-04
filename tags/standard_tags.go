@@ -7,8 +7,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/osteele/liquid/expressions"
-	"github.com/osteele/liquid/render"
+	"github.com/reidransom/liquid/expressions"
+	"github.com/reidransom/liquid/render"
 )
 
 // AddStandardTags defines the standard Liquid tags.

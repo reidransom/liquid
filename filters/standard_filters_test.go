@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/osteele/liquid/expressions"
+	"github.com/reidransom/liquid/expressions"
 )
 
 var filterTests = []struct {

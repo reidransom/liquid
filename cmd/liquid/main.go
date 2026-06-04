@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/osteele/liquid"
+	"github.com/reidransom/liquid"
 )
 
 // for testing

@@ -10,8 +10,8 @@ import (
 
 	yaml "gopkg.in/yaml.v2"
 
-	"github.com/osteele/liquid/expressions"
-	"github.com/osteele/liquid/render"
+	"github.com/reidransom/liquid/expressions"
+	"github.com/reidransom/liquid/render"
 )
 
 // An IterationKeyedMap is a map that yields its keys, instead of (key, value) pairs, when iterated.

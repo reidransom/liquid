@@ -9,9 +9,9 @@ import (
 	"maps"
 	"strings"
 
-	"github.com/osteele/liquid/parser"
+	"github.com/reidransom/liquid/parser"
 
-	"github.com/osteele/liquid/expressions"
+	"github.com/reidransom/liquid/expressions"
 )
 
 // Context provides the rendering context for a tag renderer.

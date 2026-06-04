@@ -9,8 +9,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/osteele/liquid/parser"
-	"github.com/osteele/liquid/render"
+	"github.com/reidransom/liquid/parser"
+	"github.com/reidransom/liquid/render"
 )
 
 var cfTagTests = []struct{ in, expected string }{
