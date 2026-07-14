@@ -3,6 +3,12 @@
 
 ## Unreleased
 
+## 1.9.1 (2026-07-14)
+
+### Fixed
+
+- **Generated parser refresh + CI**: regenerated `expressions/y.go` with current `goyacc`, which now emits `yyFlag = -32768` instead of the older `-1000` sentinel. Also corrected the `expressions.y` prologue import left at `github.com/osteele/liquid/values` by the module-rename commit, so regeneration produces the correct `github.com/reidransom/liquid/values` import. The previously committed `y.go` was stale on both axes, which made the `verify-generated` CI job fail. Behavior is unchanged; only the parser sentinel constant differs.
+
 ## 1.9.0 (2026-07-13)
 
 ### Added
