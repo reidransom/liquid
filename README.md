@@ -95,6 +95,34 @@ out, _ := engine.ParseAndRenderString(template, bindings)
 
 **Note**: Jekyll extensions are disabled by default to maintain compatibility with standard Shopify Liquid.
 
+### Commerce Filters
+
+The engine registers the Shopify commerce [`money` filter family](https://shopify.dev/docs/api/liquid/filters#money) — `money`, `money_with_currency`, `money_without_currency`, and `money_without_trailing_zeros` — so templates such as `{{ price_cents | money_without_trailing_zeros }}` render instead of aborting the build with an "undefined filter" error.
+
+By default the input is an integer number of **cents** (matching real Shopify `product.price` semantics and front-matter fields like `price_cents: 100000`), formatted with `$`, currency code `USD`, and no thousands separator (Shopify's default `${{amount}}` format):
+
+```go
+engine := liquid.NewEngine()
+out, _ := engine.ParseAndRenderString(`{{ 100000 | money_without_trailing_zeros }}`, nil)
+// Output: $1000
+```
+
+Override the symbol, currency code, thousands separator, or input unit with `SetMoneyConfig`:
+
+```go
+engine := liquid.NewEngine()
+engine.SetMoneyConfig(filters.MoneyOptions{
+    Symbol:             "€",
+    CurrencyCode:       "EUR",
+    ThousandsSeparator: ",",
+    InputIsCents:       true, // false treats the input as a dollar amount (the doc-example mode)
+})
+out, _ := engine.ParseAndRenderString(`{{ 100000 | money_with_currency }}`, nil)
+// Output: €1,000.00 EUR
+```
+
+A zero-value `MoneyOptions` falls back to the defaults. These are Shopify-commerce filters, not part of core Liquid or stock Jekyll; they live in `filters/money_filters.go` and are registered separately from the core `AddStandardFilters` set.
+
 ### Command-Line tool
 
 `go install github.com/osteele/liquid/cmd/liquid@latest` installs a command-line
@@ -171,6 +199,8 @@ These features of Shopify Liquid aren't implemented:
   }}`. [[Issue #42](https://github.com/osteele/liquid/issues/42)]
 - Warn and lax [error modes](https://github.com/shopify/liquid#error-modes).
   - Note: `Engine.LaxFilters()` enables Shopify-compatible behavior for undefined filters (silently pass through).
+
+The Shopify commerce `money` filter family **is** implemented and registered by default; see [Commerce Filters](#commerce-filters) above.
 
 ### Drops
 

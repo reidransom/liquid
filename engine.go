@@ -17,6 +17,7 @@ type Engine struct{ cfg render.Config }
 func NewEngine() *Engine {
 	e := Engine{render.NewConfig()}
 	filters.AddStandardFilters(&e.cfg)
+	filters.AddMoneyFilters(&e.cfg, filters.DefaultMoneyOptions())
 	tags.AddStandardTags(&e.cfg)
 
 	return &e
@@ -53,6 +54,17 @@ func (e *Engine) RegisterBlock(name string, td Renderer) {
 // * https://github.com/osteele/gojekyll/blob/master/filters/filters.go
 func (e *Engine) RegisterFilter(name string, fn any) {
 	e.cfg.AddFilter(name, fn)
+}
+
+// SetMoneyConfig re-registers the Shopify "money" filter family with the given
+// options. NewEngine already registers the family with DefaultMoneyOptions
+// ($, USD, no thousands separator, input in cents). Call this to change the
+// currency symbol, code, thousands separator, or input unit (cents vs.
+// dollars). Re-registration overwrites the previously registered money filters.
+//
+// A zero-value opts is replaced with DefaultMoneyOptions().
+func (e *Engine) SetMoneyConfig(opts filters.MoneyOptions) {
+	filters.AddMoneyFilters(&e.cfg, opts)
 }
 
 // RegisterTag defines a tag e.g. {% tag %}.

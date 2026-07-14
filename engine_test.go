@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reidransom/liquid/filters"
 	"github.com/reidransom/liquid/render"
 
 	"github.com/stretchr/testify/require"
@@ -184,6 +185,39 @@ func Test_template_store(t *testing.T) {
 	engine.RegisterTemplateStore(mockstore)
 	out, _ := engine.ParseAndRenderString(string(template), params)
 	require.Equal(t, "Message Text: filename from: template.liquid.", out)
+}
+
+// TestEngine_MoneyFilters verifies NewEngine registers the Shopify money filter
+// family by default, and that SetMoneyConfig re-registers it with custom
+// options. See _issues/BUG-money-filters.md.
+func TestEngine_MoneyFilters(t *testing.T) {
+	// NewEngine registers the family with defaults (cents input).
+	engine := NewEngine()
+	out, err := engine.ParseAndRenderString(`{{ 100000 | money_without_trailing_zeros }}`, emptyBindings)
+	require.NoError(t, err)
+	require.Equal(t, "$1000", out)
+
+	// money_with_currency default appends USD.
+	out, err = engine.ParseAndRenderString(`{{ 100000 | money_with_currency }}`, emptyBindings)
+	require.NoError(t, err)
+	require.Equal(t, "$1000.00 USD", out)
+
+	// SetMoneyConfig overrides the format (e.g. a thousands separator).
+	engine.SetMoneyConfig(filters.MoneyOptions{
+		Symbol:             "€",
+		CurrencyCode:       "EUR",
+		ThousandsSeparator: ",",
+		InputIsCents:       true,
+	})
+	out, err = engine.ParseAndRenderString(`{{ 100000 | money_without_trailing_zeros }}`, emptyBindings)
+	require.NoError(t, err)
+	require.Equal(t, "€1,000", out)
+
+	// SetMoneyConfig with a zero value falls back to defaults.
+	engine.SetMoneyConfig(filters.MoneyOptions{})
+	out, err = engine.ParseAndRenderString(`{{ 100000 | money_with_currency }}`, emptyBindings)
+	require.NoError(t, err)
+	require.Equal(t, "$1000.00 USD", out)
 }
 
 func TestEngine_LaxFilters(t *testing.T) {
