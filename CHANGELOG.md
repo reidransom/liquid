@@ -3,9 +3,11 @@
 
 ## Unreleased
 
+## 1.9.0 (2026-07-13)
+
 ### Added
 
-- **Shopify `money` filter family**: `money`, `money_with_currency`, `money_without_currency`, and `money_without_trailing_zeros` are now registered by `NewEngine`. The filters format an integer number of cents (default) as currency, matching real Shopify `product.price` semantics; input unit (cents vs. dollars), symbol, currency code, and thousands separator are configurable via the new `Engine.SetMoneyConfig(filters.MoneyOptions)` and `filters.AddMoneyFilters`. A zero-value `MoneyOptions` falls back to defaults (`$`, `USD`, no thousands separator, cents input). Previously, any use of these filters aborted the build with an "undefined filter" error. See `_issues/BUG-money-filters.md`.
+- **Shopify `money` filter family**: `money`, `money_with_currency`, `money_without_currency`, and `money_without_trailing_zeros` are now registered by `NewEngine`. The filters format an integer number of cents (default) as currency, matching real Shopify `product.price` semantics; input unit (cents vs. dollars), symbol, currency code, and thousands separator are configurable via the new `Engine.SetMoneyConfig(filters.MoneyOptions)` and `filters.AddMoneyFilters`. A zero-value `MoneyOptions` falls back to defaults (`$`, `USD`, no thousands separator, cents input). Previously, any use of these filters aborted the build with an "undefined filter" error.
 
 ## 1.8.1 (2026-02-27)
 
