@@ -1,1 +1,1 @@
-rendered shadowed={{ shadowed }}
+{% test_set %}rendered shadowed={{ shadowed }}

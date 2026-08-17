@@ -3,6 +3,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Include assignment scope**: assignments made while rendering an included template now remain available to the including template, while include-local bindings still restore after rendering. This matches Jekyll templates that use nested includes to build shared navigation state.
+
 ## 1.9.1 (2026-07-14)
 
 ### Fixed

@@ -16,9 +16,13 @@ import (
 
 // Render renders the render tree.
 func Render(node Node, w io.Writer, vars map[string]any, c Config) Error {
+	return renderNode(node, w, newNodeContext(vars, c))
+}
+
+func renderNode(node Node, w io.Writer, ctx nodeContext) Error {
 	tw := trimWriter{w: w}
 
-	err := node.render(&tw, newNodeContext(vars, c))
+	err := node.render(&tw, ctx)
 	if err != nil {
 		return err
 	}
@@ -26,7 +30,6 @@ func Render(node Node, w io.Writer, vars map[string]any, c Config) Error {
 	if _, err := tw.Flush(); err != nil {
 		panic(err)
 	}
-
 	return nil
 }
 

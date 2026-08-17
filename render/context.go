@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"maps"
 	"strings"
 
 	"github.com/reidransom/liquid/parser"
@@ -177,16 +176,37 @@ func (c rendererContext) RenderFile(filename string, b map[string]any) (string, 
 		return "", err
 	}
 
-	bindings := make(map[string]any, len(c.ctx.bindings)+len(b))
-	maps.Copy(bindings, c.ctx.bindings)
-	maps.Copy(bindings, b)
+	restore := scopedBindings(c.ctx.bindings, b)
+	defer restore()
 
 	buf := new(bytes.Buffer)
-	if err := Render(root, buf, bindings, c.ctx.config); err != nil {
+	if err := renderNode(root, buf, c.ctx); err != nil {
 		return "", err
 	}
-
 	return buf.String(), nil
+}
+
+type bindingRestore struct {
+	value any
+	found bool
+}
+
+func scopedBindings(bindings, local map[string]any) func() {
+	previous := make(map[string]bindingRestore, len(local))
+	for name, value := range local {
+		old, found := bindings[name]
+		previous[name] = bindingRestore{value: old, found: found}
+		bindings[name] = value
+	}
+	return func() {
+		for name, old := range previous {
+			if old.found {
+				bindings[name] = old.value
+			} else {
+				delete(bindings, name)
+			}
+		}
+	}
 }
 
 // InnerString renders the children to a string.
