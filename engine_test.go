@@ -281,6 +281,15 @@ func TestEngine_EnableJekyllExtensions(t *testing.T) {
 	require.Equal(t, "/about/", out)
 }
 
+func TestEngine_RangeAcceptsArithmeticResult(t *testing.T) {
+	out, err := NewEngine().ParseAndRenderString(
+		`{% assign end = 6 | minus: 1 | divided_by: 5 %}{% for i in (1..end) %}{{ i }}{% endfor %}`,
+		emptyBindings,
+	)
+	require.NoError(t, err)
+	require.Equal(t, "1", out)
+}
+
 func TestEngine_SetAutoEscapeReplacer(t *testing.T) {
 	engine := NewEngine()
 	engine.SetAutoEscapeReplacer(render.HtmlEscaper)

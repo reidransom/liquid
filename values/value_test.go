@@ -46,6 +46,37 @@ func TestValue_Int(t *testing.T) {
 	require.Panics(t, func() { nv.Int() })
 }
 
+func TestValue_IntIntegralKinds(t *testing.T) {
+	for _, value := range []any{
+		int8(1),
+		int16(1),
+		int32(1),
+		int64(1),
+		uint(1),
+		uint8(1),
+		uint16(1),
+		uint32(1),
+		uint64(1),
+		uintptr(1),
+	} {
+		require.Equal(t, 1, ValueOf(value).Int(), "%T", value)
+	}
+
+	for _, value := range []any{nil, 1.5, "1", true, []int{1}} {
+		require.Panics(t, func() { ValueOf(value).Int() }, "%T", value)
+	}
+}
+
+func TestValue_IntPlatformBoundaries(t *testing.T) {
+	maxInt := int(^uint(0) >> 1)
+	require.Equal(t, maxInt, ValueOf(maxInt).Int())
+	require.Panics(t, func() { ValueOf(uint64(maxInt) + 1).Int() })
+
+	if int64(maxInt) < int64(^uint64(0)>>1) {
+		require.Panics(t, func() { ValueOf(int64(maxInt) + 1).Int() })
+	}
+}
+
 func TestValue_IndexValue(t *testing.T) {
 	require.Nil(t, ValueOf(nil).PropertyValue(ValueOf("first")).Interface())
 	require.Nil(t, ValueOf(false).PropertyValue(ValueOf("first")).Interface())

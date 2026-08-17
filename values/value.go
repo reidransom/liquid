@@ -106,8 +106,18 @@ func (v wrapperValue) PropertyValue(Value) Value { return nilValue }
 func (v wrapperValue) Test() bool                { return v.value != nil && v.value != false }
 
 func (v wrapperValue) Int() int {
-	if n, ok := v.value.(int); ok {
-		return n
+	value := reflect.ValueOf(v.value)
+	switch value.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		n := value.Int()
+		if int64(int(n)) == n {
+			return int(n)
+		}
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		n := value.Uint()
+		if n <= uint64(^uint(0)>>1) {
+			return int(n)
+		}
 	}
 
 	panic(conversionError("", v.value, reflect.TypeOf(1)))
