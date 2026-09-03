@@ -173,6 +173,15 @@ func addFileCacheTestTag(cfg *Config) {
 	})
 }
 
+func addFileCacheAssignmentTag(cfg *Config) {
+	cfg.AddTag("file_cache_assign", func(string) (func(io.Writer, Context) error, error) {
+		return func(io.Writer, Context) error {
+			c.Set("x", c.Get("include"))
+			return nil
+		}, nil
+	})
+}
+
 func addFileCacheCompileCounter(cfg *Config, count *atomic.Int32) {
 	cfg.AddTag("file_cache_compile", func(string) (func(io.Writer, Context) error, error) {
 		count.Add(1)
@@ -361,13 +370,14 @@ func TestRenderFileCacheIsOptIn(t *testing.T) {
 			cfg := NewConfig()
 			store := &countingTemplateStore{
 				templates: map[string][]byte{
-					"partial": []byte(`{% file_cache_compile %}{% assign x = include %}{{ page }}:{{ include }}`),
+					"partial": []byte(`{% file_cache_compile %}{% file_cache_assign %}{{ page }}:{{ include }}`),
 				},
 			}
 			var compiles atomic.Int32
 			cfg.TemplateStore = store
 			addFileCacheTestTag(&cfg)
 			addFileCacheCompileCounter(&cfg, &compiles)
+			addFileCacheAssignmentTag(&cfg)
 			if test.enableCache {
 				cfg.EnableFileCache()
 			}
@@ -559,8 +569,8 @@ func TestRenderFileCacheAllowsNestedReentry(t *testing.T) {
 	buf := new(bytes.Buffer)
 	require.NoError(t, Render(root, buf, map[string]any{}, cfg))
 	require.Equal(t, "done", buf.String())
-	require.Equal(t, int32(2), store.reads.Load())
-	require.Equal(t, int32(2), compiles.Load())
+	require.Equal(t, int32(1), store.reads.Load())
+	require.Equal(t, int32(1), compiles.Load())
 }
 func TestRenderFileCacheLoadsDifferentKeysConcurrently(t *testing.T) {
 	cfg := NewConfig()
