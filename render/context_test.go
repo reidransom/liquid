@@ -449,34 +449,41 @@ func TestRenderFileCacheKeysCallerLocation(t *testing.T) {
 }
 
 func TestRenderFileCachePreservesCallerDiagnostics(t *testing.T) {
-	cfg := NewConfig()
-	cfg.TemplateStore = &countingTemplateStore{
-		templates: map[string][]byte{"partial": []byte(`{% caller_error %}`)},
-	}
-	addFileCacheTestTag(&cfg)
-	cfg.AddTag("caller_error", func(string) (func(io.Writer, Context) error, error) {
-		return func(io.Writer, Context) error {
-			return errors.New("current caller error")
-		}, nil
-	})
-	cfg.EnableFileCache()
-
-	for _, test := range []struct {
+	callers := []struct {
 		path string
 		line int
 	}{
 		{path: "first.liquid", line: 10},
 		{path: "second.liquid", line: 20},
-	} {
-		root, err := cfg.Compile(`{% render_file partial %}`, parser.SourceLoc{
-			Pathname: test.path,
-			LineNo:   test.line,
+	}
+
+	for _, order := range [][]int{{0, 1}, {1, 0}} {
+		t.Run(fmt.Sprintf("%s_then_%s", callers[order[0]].path, callers[order[1]].path), func(t *testing.T) {
+			cfg := NewConfig()
+			cfg.TemplateStore = &countingTemplateStore{
+				templates: map[string][]byte{"partial": []byte(`{% caller_error %}`)},
+			}
+			addFileCacheTestTag(&cfg)
+			cfg.AddTag("caller_error", func(string) (func(io.Writer, Context) error, error) {
+				return func(io.Writer, Context) error {
+					return errors.New("current caller error")
+				}, nil
+			})
+			cfg.EnableFileCache()
+
+			for _, callerIndex := range order {
+				caller := callers[callerIndex]
+				root, err := cfg.Compile(`{% render_file partial %}`, parser.SourceLoc{
+					Pathname: caller.path,
+					LineNo:   caller.line,
+				})
+				require.NoError(t, err)
+				err = Render(root, io.Discard, map[string]any{}, cfg)
+				require.Error(t, err)
+				require.Equal(t, caller.path, err.Path())
+				require.Equal(t, caller.line, err.LineNumber())
+			}
 		})
-		require.NoError(t, err)
-		err = Render(root, io.Discard, map[string]any{}, cfg)
-		require.Error(t, err)
-		require.Equal(t, test.path, err.Path())
-		require.Equal(t, test.line, err.LineNumber())
 	}
 }
 
