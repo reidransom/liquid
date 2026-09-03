@@ -175,7 +175,7 @@ func addFileCacheTestTag(cfg *Config) {
 
 func addFileCacheAssignmentTag(cfg *Config) {
 	cfg.AddTag("file_cache_assign", func(string) (func(io.Writer, Context) error, error) {
-		return func(io.Writer, Context) error {
+		return func(_ io.Writer, c Context) error {
 			c.Set("x", c.Get("include"))
 			return nil
 		}, nil
