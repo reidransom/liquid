@@ -173,6 +173,44 @@ func (tl *MockTemplateStore) ReadTemplate(filename string) ([]byte, error) {
 	return template, nil
 }
 
+type countingEngineTemplateStore struct {
+	reads int
+}
+
+func (s *countingEngineTemplateStore) ReadTemplate(string) ([]byte, error) {
+	s.reads++
+	return []byte("partial"), nil
+}
+
+func TestEngine_EnableFileCache(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		enableCache   bool
+		expectedReads int
+	}{
+		{name: "default", expectedReads: 2},
+		{name: "enabled", enableCache: true, expectedReads: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			engine := NewEngine()
+			store := &countingEngineTemplateStore{}
+			engine.RegisterTemplateStore(store)
+			if test.enableCache {
+				engine.EnableFileCache()
+			}
+
+			template, err := engine.ParseTemplateLocation([]byte(`{% include "partial" %}`), "layout.liquid", 1)
+			require.NoError(t, err)
+			for range 2 {
+				output, err := template.RenderString(emptyBindings)
+				require.NoError(t, err)
+				require.Equal(t, "partial", output)
+			}
+			require.Equal(t, test.expectedReads, store.reads)
+		})
+	}
+}
+
 func Test_template_store(t *testing.T) {
 	template := []byte(`{% include "template.liquid" %}`)
 	mockstore := &MockTemplateStore{}

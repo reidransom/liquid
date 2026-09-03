@@ -3,6 +3,14 @@
 
 ## Unreleased
 
+### Added
+
+- **Compiled file cache**: `Engine.EnableFileCache` opts an engine into a
+  per-engine cache of successfully compiled `Context.RenderFile` templates and
+  not-found results. Entries retain the resolved filename and caller source
+  location, so rendered output, include resolution, and diagnostics remain
+  context-specific.
+
 ### Fixed
 
 - **Include assignment scope**: assignments made while rendering an included template now remain available to the including template, while include-local bindings still restore after rendering. This matches Jekyll templates that use nested includes to build shared navigation state.

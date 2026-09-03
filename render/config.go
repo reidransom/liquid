@@ -13,6 +13,7 @@ type Config struct {
 	StrictVariables bool
 	TemplateStore   TemplateStore
 
+	fileCache *fileCache
 	escapeReplacer Replacer
 
 	// JekyllExtensions enables Jekyll-specific extensions to Liquid.
@@ -46,4 +47,10 @@ func NewConfig() Config {
 func (c *Config) SetAutoEscapeReplacer(replacer Replacer) {
 	c.escapeReplacer = replacer
 	c.AddSafeFilter()
+}
+
+// EnableFileCache enables caching of successfully compiled templates rendered
+// through Context.RenderFile. The cache is scoped to this Config.
+func (c *Config) EnableFileCache() {
+	c.fileCache = newFileCache()
 }

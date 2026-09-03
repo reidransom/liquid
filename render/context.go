@@ -40,7 +40,8 @@ type Context interface {
 	// It's not guaranteed stable.
 	RenderChildren(io.Writer) Error
 	// RenderFile parses and renders a template. It's used in the implementation of the {% include %} tag.
-	// RenderFile does not cache the compiled template.
+	// By default, it does not cache compiled templates. File caching enables
+	// compiled-template reuse on the rendering configuration.
 	RenderFile(string, map[string]any) (string, error)
 	// Set updates the value of a variable in the current lexical environment.
 	// It's used in the implementation of the {% assign %} and {% capture %} tags.
@@ -159,19 +160,20 @@ func (c rendererContext) RenderChildren(w io.Writer) Error {
 }
 
 func (c rendererContext) RenderFile(filename string, b map[string]any) (string, error) {
-	source, err := c.ctx.config.TemplateStore.ReadTemplate(filename)
-	if err != nil && errors.Is(err, fs.ErrNotExist) {
-		// Is it cached?
-		if cval, ok := c.ctx.config.Cache[filename]; ok {
-			source = cval
-		} else {
-			return "", err
-		}
-	} else if err != nil {
-		return "", err
+	var (
+		root Node
+		err  error
+	)
+	if c.ctx.config.fileCache != nil {
+		root, err = c.ctx.config.fileCache.load(fileCacheKey{
+			filename: filename,
+			location: c.sourceLocation(),
+		}, func() (Node, error) {
+			return c.compileFile(filename)
+		})
+	} else {
+		root, err = c.compileFile(filename)
 	}
-
-	root, err := c.ctx.config.Compile(string(source), c.node.SourceLoc)
 	if err != nil {
 		return "", err
 	}
@@ -184,6 +186,32 @@ func (c rendererContext) RenderFile(filename string, b map[string]any) (string, 
 		return "", err
 	}
 	return buf.String(), nil
+}
+
+func (c rendererContext) compileFile(filename string) (Node, error) {
+	source, err := c.ctx.config.TemplateStore.ReadTemplate(filename)
+	if err != nil && errors.Is(err, fs.ErrNotExist) {
+		if cval, ok := c.ctx.config.Cache[filename]; ok {
+			source = cval
+		} else {
+			return nil, err
+		}
+	} else if err != nil {
+		return nil, err
+	}
+
+	return c.ctx.config.Compile(string(source), c.sourceLocation())
+}
+
+func (c rendererContext) sourceLocation() parser.SourceLoc {
+	switch {
+	case c.node != nil:
+		return c.node.SourceLoc
+	case c.cn != nil:
+		return c.cn.SourceLoc
+	default:
+		return parser.SourceLoc{}
+	}
 }
 
 type bindingRestore struct {

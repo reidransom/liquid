@@ -5,8 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -137,6 +141,56 @@ func addContextTestTags(s Config) {
 			return c.Errorf("giftwrapped")
 		}, nil
 	})
+}
+
+type countingTemplateStore struct {
+	templates map[string][]byte
+	errs      map[string]error
+	reads     atomic.Int32
+}
+
+func (s *countingTemplateStore) ReadTemplate(filename string) ([]byte, error) {
+	s.reads.Add(1)
+	if err, ok := s.errs[filename]; ok {
+		return nil, err
+	}
+	if source, ok := s.templates[filename]; ok {
+		return source, nil
+	}
+	return nil, fs.ErrNotExist
+}
+
+func addFileCacheTestTag(cfg *Config) {
+	cfg.AddTag("render_file", func(filename string) (func(io.Writer, Context) error, error) {
+		return func(w io.Writer, c Context) error {
+			s, err := c.RenderFile(filename, map[string]any{"include": c.Get("value")})
+			if err != nil {
+				return err
+			}
+			_, err = io.WriteString(w, s)
+			return err
+		}, nil
+	})
+}
+
+func addFileCacheCompileCounter(cfg *Config, count *atomic.Int32) {
+	cfg.AddTag("file_cache_compile", func(string) (func(io.Writer, Context) error, error) {
+		count.Add(1)
+		return func(io.Writer, Context) error {
+			return nil
+		}, nil
+	})
+}
+
+type blockingTemplateStore struct {
+	started chan string
+	release map[string]chan struct{}
+}
+
+func (s *blockingTemplateStore) ReadTemplate(filename string) ([]byte, error) {
+	s.started <- filename
+	<-s.release[filename]
+	return []byte("partial"), nil
 }
 
 var contextTests = []struct{ in, out string }{
@@ -291,4 +345,325 @@ func TestContext_file_not_found_error(t *testing.T) {
 	err = Render(root, io.Discard, contextTestBindings, cfg)
 	require.Error(t, err)
 	require.True(t, os.IsNotExist(err.Cause()))
+}
+
+func TestRenderFileCacheIsOptIn(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		enableCache   bool
+		expectedReads int32
+		expectedCompiles int32
+	}{
+		{name: "default", expectedReads: 2, expectedCompiles: 2},
+		{name: "enabled", enableCache: true, expectedReads: 1, expectedCompiles: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			cfg := NewConfig()
+			store := &countingTemplateStore{
+				templates: map[string][]byte{
+					"partial": []byte(`{% file_cache_compile %}{% assign x = include %}{{ page }}:{{ include }}`),
+				},
+			}
+			var compiles atomic.Int32
+			cfg.TemplateStore = store
+			addFileCacheTestTag(&cfg)
+			addFileCacheCompileCounter(&cfg, &compiles)
+			if test.enableCache {
+				cfg.EnableFileCache()
+			}
+
+			root, err := cfg.Compile(`{% render_file partial %}:{{ include }}:{{ x }}`, parser.SourceLoc{
+				Pathname: "layout.liquid",
+				LineNo:   1,
+			})
+			require.NoError(t, err)
+
+			for _, bindings := range []map[string]any{
+				{"page": "first", "include": "outer-1", "value": "inner-1"},
+				{"page": "second", "include": "outer-2", "value": "inner-2"},
+			} {
+				buf := new(bytes.Buffer)
+				err = Render(root, buf, bindings, cfg)
+				require.NoError(t, err)
+				require.Equal(t, fmt.Sprintf("%s:%s:%s:%s", bindings["page"], bindings["value"], bindings["include"], bindings["value"]), buf.String())
+			}
+
+			require.Equal(t, test.expectedReads, store.reads.Load())
+			require.Equal(t, test.expectedCompiles, compiles.Load())
+		})
+	}
+}
+
+func TestRenderFileCacheCachesNotFound(t *testing.T) {
+	cfg := NewConfig()
+	store := &countingTemplateStore{}
+	cfg.TemplateStore = store
+	addFileCacheTestTag(&cfg)
+	cfg.EnableFileCache()
+
+	root, err := cfg.Compile(`{% render_file missing %}`, parser.SourceLoc{Pathname: "layout.liquid", LineNo: 1})
+	require.NoError(t, err)
+
+	for range 2 {
+		err = Render(root, io.Discard, map[string]any{}, cfg)
+		require.Error(t, err)
+		require.True(t, errors.Is(err.Cause(), fs.ErrNotExist))
+	}
+	require.Equal(t, int32(1), store.reads.Load())
+}
+
+func TestRenderFileCacheKeysCallerLocation(t *testing.T) {
+	cfg := NewConfig()
+	store := &countingTemplateStore{
+		templates: map[string][]byte{"partial": []byte(`{% file_cache_compile %}partial`)},
+	}
+	var compiles atomic.Int32
+	cfg.TemplateStore = store
+	addFileCacheTestTag(&cfg)
+	addFileCacheCompileCounter(&cfg, &compiles)
+	cfg.EnableFileCache()
+
+	rootA, err := cfg.Compile(`{% render_file partial %}`, parser.SourceLoc{Pathname: "first.liquid", LineNo: 10})
+	require.NoError(t, err)
+	rootB, err := cfg.Compile(`{% render_file partial %}`, parser.SourceLoc{Pathname: "first.liquid", LineNo: 20})
+	require.NoError(t, err)
+	rootC, err := cfg.Compile(`{% render_file partial %}`, parser.SourceLoc{Pathname: "second.liquid", LineNo: 10})
+	require.NoError(t, err)
+
+	for _, root := range []Node{rootA, rootB, rootC, rootA, rootB, rootC} {
+		err = Render(root, io.Discard, map[string]any{}, cfg)
+		require.NoError(t, err)
+	}
+	require.Equal(t, int32(3), store.reads.Load())
+	require.Equal(t, int32(3), compiles.Load())
+}
+
+func TestRenderFileCachePreservesCallerDiagnostics(t *testing.T) {
+	cfg := NewConfig()
+	cfg.TemplateStore = &countingTemplateStore{
+		templates: map[string][]byte{"partial": []byte(`{% caller_error %}`)},
+	}
+	addFileCacheTestTag(&cfg)
+	cfg.AddTag("caller_error", func(string) (func(io.Writer, Context) error, error) {
+		return func(io.Writer, Context) error {
+			return errors.New("current caller error")
+		}, nil
+	})
+	cfg.EnableFileCache()
+
+	for _, test := range []struct {
+		path string
+		line int
+	}{
+		{path: "first.liquid", line: 10},
+		{path: "second.liquid", line: 20},
+	} {
+		root, err := cfg.Compile(`{% render_file partial %}`, parser.SourceLoc{
+			Pathname: test.path,
+			LineNo:   test.line,
+		})
+		require.NoError(t, err)
+		err = Render(root, io.Discard, map[string]any{}, cfg)
+		require.Error(t, err)
+		require.Equal(t, test.path, err.Path())
+		require.Equal(t, test.line, err.LineNumber())
+	}
+}
+
+
+func TestRenderFileCacheRetriesLoadAndParseFailures(t *testing.T) {
+	t.Run("read error", func(t *testing.T) {
+		cfg := NewConfig()
+		store := &countingTemplateStore{errs: map[string]error{"partial": errors.New("read failure")}}
+		cfg.TemplateStore = store
+		addFileCacheTestTag(&cfg)
+		cfg.EnableFileCache()
+
+		root, err := cfg.Compile(`{% render_file partial %}`, parser.SourceLoc{})
+		require.NoError(t, err)
+		for range 2 {
+			require.Error(t, Render(root, io.Discard, map[string]any{}, cfg))
+		}
+		require.Equal(t, int32(2), store.reads.Load())
+	})
+
+	t.Run("parse error", func(t *testing.T) {
+		cfg := NewConfig()
+		store := &countingTemplateStore{templates: map[string][]byte{"partial": []byte(`{% undefined_tag %}`)}}
+		cfg.TemplateStore = store
+		addFileCacheTestTag(&cfg)
+		cfg.EnableFileCache()
+
+		root, err := cfg.Compile(`{% render_file partial %}`, parser.SourceLoc{})
+		require.NoError(t, err)
+		for range 2 {
+			require.Error(t, Render(root, io.Discard, map[string]any{}, cfg))
+		}
+		require.Equal(t, int32(2), store.reads.Load())
+	})
+}
+
+func TestRenderFileCacheRendersRuntimeErrorsInCurrentContext(t *testing.T) {
+	cfg := NewConfig()
+	store := &countingTemplateStore{templates: map[string][]byte{"partial": []byte(`{% runtime_error %}`)}}
+	cfg.TemplateStore = store
+	addFileCacheTestTag(&cfg)
+	cfg.AddTag("runtime_error", func(string) (func(io.Writer, Context) error, error) {
+		return func(w io.Writer, c Context) error {
+			if c.Get("fail") == true {
+				return errors.New("runtime failure")
+			}
+			_, err := io.WriteString(w, "ok")
+			return err
+		}, nil
+	})
+	cfg.EnableFileCache()
+
+	root, err := cfg.Compile(`{% render_file partial %}`, parser.SourceLoc{})
+	require.NoError(t, err)
+	require.Error(t, Render(root, io.Discard, map[string]any{"fail": true}, cfg))
+
+	buf := new(bytes.Buffer)
+	require.NoError(t, Render(root, buf, map[string]any{"fail": false}, cfg))
+	require.Equal(t, "ok", buf.String())
+	require.Equal(t, int32(1), store.reads.Load())
+}
+
+func TestRenderFileCacheAllowsNestedReentry(t *testing.T) {
+	cfg := NewConfig()
+	store := &countingTemplateStore{
+		templates: map[string][]byte{"partial": []byte(`{% file_cache_compile %}{% reenter_file partial %}`)},
+	}
+	var compiles atomic.Int32
+	cfg.TemplateStore = store
+	addFileCacheCompileCounter(&cfg, &compiles)
+	cfg.AddTag("reenter_file", func(filename string) (func(io.Writer, Context) error, error) {
+		return func(w io.Writer, c Context) error {
+			depth, _ := c.Get("depth").(int)
+			if depth > 0 {
+				_, err := io.WriteString(w, "done")
+				return err
+			}
+			s, err := c.RenderFile(filename, map[string]any{"depth": depth + 1})
+			if err != nil {
+				return err
+			}
+			_, err = io.WriteString(w, s)
+			return err
+		}, nil
+	})
+	cfg.EnableFileCache()
+
+	root, err := cfg.Compile(`{% reenter_file partial %}`, parser.SourceLoc{Pathname: "layout.liquid", LineNo: 1})
+	require.NoError(t, err)
+	buf := new(bytes.Buffer)
+	require.NoError(t, Render(root, buf, map[string]any{}, cfg))
+	require.Equal(t, "done", buf.String())
+	require.Equal(t, int32(2), store.reads.Load())
+	require.Equal(t, int32(2), compiles.Load())
+}
+func TestRenderFileCacheLoadsDifferentKeysConcurrently(t *testing.T) {
+	cfg := NewConfig()
+	store := &blockingTemplateStore{
+		started: make(chan string, 2),
+		release: map[string]chan struct{}{
+			"first":  make(chan struct{}),
+			"second": make(chan struct{}),
+		},
+	}
+	cfg.TemplateStore = store
+	addFileCacheTestTag(&cfg)
+	cfg.EnableFileCache()
+
+	rootFirst, err := cfg.Compile(`{% render_file first %}`, parser.SourceLoc{Pathname: "layout.liquid", LineNo: 1})
+	require.NoError(t, err)
+	rootSecond, err := cfg.Compile(`{% render_file second %}`, parser.SourceLoc{Pathname: "layout.liquid", LineNo: 1})
+	require.NoError(t, err)
+
+	var releaseOnce sync.Once
+	release := func() {
+		releaseOnce.Do(func() {
+			close(store.release["first"])
+			close(store.release["second"])
+		})
+	}
+	defer release()
+
+	results := make(chan error, 2)
+	go func() {
+		results <- Render(rootFirst, io.Discard, map[string]any{}, cfg)
+	}()
+	go func() {
+		results <- Render(rootSecond, io.Discard, map[string]any{}, cfg)
+	}()
+
+	seen := make(map[string]bool, 2)
+	for range 2 {
+		select {
+		case filename := <-store.started:
+			seen[filename] = true
+		case <-time.After(time.Second):
+			t.Fatal("different file cache keys were serialized")
+		}
+	}
+	require.True(t, seen["first"])
+	require.True(t, seen["second"])
+
+	release()
+	require.NoError(t, <-results)
+	require.NoError(t, <-results)
+}
+
+
+func TestRenderFileCacheSingleFlightsConcurrentRenders(t *testing.T) {
+	cfg := NewConfig()
+	store := &countingTemplateStore{
+		templates: map[string][]byte{"partial": []byte(`{% file_cache_compile %}{{ page }}:{{ include }}`)},
+	}
+	var compiles atomic.Int32
+	cfg.TemplateStore = store
+	addFileCacheTestTag(&cfg)
+	addFileCacheCompileCounter(&cfg, &compiles)
+	cfg.EnableFileCache()
+
+	root, err := cfg.Compile(`{% render_file partial %}`, parser.SourceLoc{Pathname: "layout.liquid", LineNo: 1})
+	require.NoError(t, err)
+
+	type result struct {
+		output string
+		err    error
+	}
+	const renders = 32
+	start := make(chan struct{})
+	results := make(chan result, renders)
+	var wg sync.WaitGroup
+	for i := range renders {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			<-start
+			buf := new(bytes.Buffer)
+			err := Render(root, buf, map[string]any{
+				"page":  fmt.Sprintf("page-%d", i),
+				"value": fmt.Sprintf("include-%d", i),
+			}, cfg)
+			results <- result{output: buf.String(), err: err}
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+
+	expected := make(map[string]bool, renders)
+	for i := range renders {
+		expected[fmt.Sprintf("page-%d:include-%d", i, i)] = true
+	}
+	for result := range results {
+		require.NoError(t, result.err)
+		require.True(t, expected[result.output], "unexpected output %q", result.output)
+		delete(expected, result.output)
+	}
+	require.Empty(t, expected)
+	require.Equal(t, int32(1), store.reads.Load())
+	require.Equal(t, int32(1), compiles.Load())
 }

@@ -91,6 +91,12 @@ func (e *Engine) RegisterTemplateStore(templateStore render.TemplateStore) {
 	e.cfg.TemplateStore = templateStore
 }
 
+// EnableFileCache enables caching of successfully compiled templates rendered
+// through Context.RenderFile. The cache is scoped to this engine.
+func (e *Engine) EnableFileCache() {
+	e.cfg.EnableFileCache()
+}
+
 // StrictVariables causes the renderer to error when the template contains an undefined variable.
 func (e *Engine) StrictVariables() {
 	e.cfg.StrictVariables = true
